@@ -258,6 +258,40 @@ export default function CapabilitiesPage() {
               {capabilities.visionAI.message}
             </p>
           </div>
+
+          {/* Media Processing Worker Status */}
+          <div className="rounded-2xl border border-white/10 bg-surface-50 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-sm font-bold text-white">Media Worker Engine</h3>
+                  <span className="text-[11px] text-slate-400 font-mono">Asynchronous queue & render daemon</span>
+                </div>
+              </div>
+
+              {capabilities.worker?.available ? (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {capabilities.worker.mode === 'inline' ? 'Inline Active' : 'Daemon Connected'}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Idle / Standalone
+                </span>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {capabilities.worker?.message || 'Media processing queue listener'}
+            </p>
+            <div className="rounded-xl bg-surface-100 p-2 font-mono text-[11px] text-slate-400">
+              Start worker daemon: <span className="text-brand-cyan">npm run worker</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

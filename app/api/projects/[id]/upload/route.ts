@@ -15,6 +15,33 @@ export async function POST(
   }
 
   try {
+    const contentType = req.headers.get('content-type') || '';
+
+    // CASE 1: Direct Browser-to-Storage upload notification (Production Vercel pattern)
+    // The browser uploads the large video directly to Supabase Storage, and notifies this API route
+    if (contentType.includes('application/json')) {
+      const body = await req.json();
+      const { storagePath, filename, sizeBytes, mimeType } = body;
+
+      if (!storagePath) {
+        return NextResponse.json({ error: 'storagePath is required' }, { status: 400 });
+      }
+
+      await db.updateProject(id, {
+        sourceType: 'upload',
+        sourceStoragePath: storagePath,
+        status: 'draft',
+      });
+
+      return NextResponse.json({
+        success: true,
+        storagePath,
+        filename: filename || path.basename(storagePath),
+        publicUrl: storage.getPublicUrl('source-videos', path.basename(storagePath)),
+      });
+    }
+
+    // CASE 2: Multipart Form Data upload (Local development / Small video uploads)
     const formData = await req.formData();
     const file = formData.get('video') as File | null;
 
@@ -32,25 +59,37 @@ export async function POST(
 
     const filename = `${id}_${Date.now()}${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const localDiskPath = await storage.saveFile('source-videos', filename, buffer);
+    const localDiskPath = await storage.saveFile('source-videos', filename, buffer, file.type || 'video/mp4');
 
-    // Run real FFprobe
-    const metadata = await probeMedia(localDiskPath);
+    // Run FFprobe if local tools available
+    let duration = 0;
+    let width = 1920;
+    let height = 1080;
+    let fps = 24.0;
+
+    try {
+      const metadata = await probeMedia(localDiskPath);
+      duration = metadata.duration;
+      width = metadata.width;
+      height = metadata.height;
+      fps = metadata.fps;
+    } catch {
+      // Worker will probe if FFprobe is not in Vercel environment
+    }
 
     // Update project
     await db.updateProject(id, {
       sourceType: 'upload',
       sourceStoragePath: localDiskPath,
-      duration: metadata.duration,
-      width: metadata.width,
-      height: metadata.height,
-      fps: metadata.fps,
+      duration,
+      width,
+      height,
+      fps,
       status: 'draft',
     });
 
     return NextResponse.json({
       success: true,
-      metadata,
       storagePath: localDiskPath,
       publicUrl: storage.getPublicUrl('source-videos', filename),
     });

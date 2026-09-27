@@ -198,6 +198,8 @@ export interface ClipEdit {
   updatedAt: string;
 }
 
+export type JobType = 'analysis' | 'clip_render';
+
 export type JobStage = 
   | 'queued'
   | 'probing_media'
@@ -218,9 +220,13 @@ export interface RenderJob {
   id: string;
   projectId: string;
   clipId?: string;
+  jobType?: JobType;
   stage: JobStage;
   progress: number; // 0 - 100
   status: 'queued' | 'running' | 'completed' | 'failed' | 'retrying';
+  workerId?: string;
+  payload?: Record<string, unknown>;
+  attempts?: number;
   message?: string;
   error?: string;
   startedAt?: string;
@@ -234,37 +240,51 @@ export interface SystemCapabilities {
     version?: string;
     path?: string;
     hardwareAccel?: string[];
+    statusRating?: 'available' | 'limited' | 'unavailable';
   };
   ffprobe: {
     available: boolean;
     version?: string;
     path?: string;
+    statusRating?: 'available' | 'limited' | 'unavailable';
+  };
+  worker: {
+    available: boolean;
+    mode: 'dedicated' | 'inline' | 'none';
+    status: 'available' | 'idle' | 'not_running';
+    message: string;
+    statusRating: 'available' | 'limited' | 'unavailable';
   };
   transcription: {
     available: boolean;
     provider: string;
     status: 'connected' | 'not_configured' | 'mock';
     message: string;
+    statusRating: 'available' | 'limited' | 'unavailable';
   };
   visionAI: {
     available: boolean;
     provider: string;
     status: 'connected' | 'not_configured' | 'fallback_motion';
     message: string;
+    statusRating: 'available' | 'limited' | 'unavailable';
   };
   storage: {
     available: boolean;
     type: 'supabase' | 'local';
     path: string;
+    statusRating: 'available' | 'limited' | 'unavailable';
   };
   database: {
     available: boolean;
     type: 'supabase' | 'local_persistent';
     message: string;
+    statusRating: 'available' | 'limited' | 'unavailable';
   };
   urlImport: {
     directVideoUrl: 'supported';
     officialPlatforms: 'limited';
     unsupportedDrm: 'unsupported';
+    statusRating: 'available' | 'limited' | 'unavailable';
   };
 }

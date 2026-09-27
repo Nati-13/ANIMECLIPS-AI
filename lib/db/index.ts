@@ -323,6 +323,32 @@ export const db = {
   },
 
   async getRenderJobs(projectId: string): Promise<RenderJob[]> {
+    if (isSupabaseConfigured && supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from('render_jobs')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        return data.map((d: any) => ({
+          id: d.id,
+          projectId: d.project_id,
+          clipId: d.clip_id,
+          jobType: d.job_type || 'analysis',
+          stage: d.stage,
+          progress: d.progress,
+          status: d.status,
+          workerId: d.worker_id,
+          payload: d.payload,
+          attempts: d.attempts,
+          message: d.message,
+          error: d.error,
+          startedAt: d.started_at,
+          completedAt: d.completed_at,
+          createdAt: d.created_at,
+        }));
+      }
+    }
     const local = loadLocalDb();
     return Object.values(local.renderJobs)
       .filter((j) => j.projectId === projectId)
@@ -330,11 +356,56 @@ export const db = {
   },
 
   async getRenderJob(jobId: string): Promise<RenderJob | null> {
+    if (isSupabaseConfigured && supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from('render_jobs')
+        .select('*')
+        .eq('id', jobId)
+        .single();
+      if (!error && data) {
+        return {
+          id: data.id,
+          projectId: data.project_id,
+          clipId: data.clip_id,
+          jobType: data.job_type || 'analysis',
+          stage: data.stage,
+          progress: data.progress,
+          status: data.status,
+          workerId: data.worker_id,
+          payload: data.payload,
+          attempts: data.attempts,
+          message: data.message,
+          error: data.error,
+          startedAt: data.started_at,
+          completedAt: data.completed_at,
+          createdAt: data.created_at,
+        };
+      }
+    }
     const local = loadLocalDb();
     return local.renderJobs[jobId] || null;
   },
 
   async createRenderJob(job: RenderJob): Promise<RenderJob> {
+    if (isSupabaseConfigured && supabaseClient) {
+      await supabaseClient.from('render_jobs').insert({
+        id: job.id,
+        project_id: job.projectId,
+        clip_id: job.clipId || null,
+        job_type: job.jobType || 'analysis',
+        stage: job.stage,
+        progress: job.progress,
+        status: job.status,
+        worker_id: job.workerId || null,
+        payload: job.payload || {},
+        attempts: job.attempts || 0,
+        message: job.message || null,
+        error: job.error || null,
+        started_at: job.startedAt || null,
+        completed_at: job.completedAt || null,
+        created_at: job.createdAt,
+      });
+    }
     const local = loadLocalDb();
     local.renderJobs[job.id] = job;
     saveLocalDb(local);
@@ -342,6 +413,21 @@ export const db = {
   },
 
   async updateRenderJob(id: string, updates: Partial<RenderJob>): Promise<RenderJob | null> {
+    if (isSupabaseConfigured && supabaseClient) {
+      const payload: Record<string, unknown> = {};
+      if (updates.stage !== undefined) payload.stage = updates.stage;
+      if (updates.progress !== undefined) payload.progress = updates.progress;
+      if (updates.status !== undefined) payload.status = updates.status;
+      if (updates.workerId !== undefined) payload.worker_id = updates.workerId;
+      if (updates.message !== undefined) payload.message = updates.message;
+      if (updates.error !== undefined) payload.error = updates.error;
+      if (updates.startedAt !== undefined) payload.started_at = updates.startedAt;
+      if (updates.completedAt !== undefined) payload.completed_at = updates.completedAt;
+      if (updates.attempts !== undefined) payload.attempts = updates.attempts;
+      if (updates.payload !== undefined) payload.payload = updates.payload;
+
+      await supabaseClient.from('render_jobs').update(payload).eq('id', id);
+    }
     const local = loadLocalDb();
     const existing = local.renderJobs[id];
     if (!existing) return null;
@@ -349,5 +435,104 @@ export const db = {
     local.renderJobs[id] = merged;
     saveLocalDb(local);
     return merged;
+  },
+
+  async claimNextJob(workerId: string): Promise<RenderJob | null> {
+    if (isSupabaseConfigured && supabaseClient) {
+      try {
+        // Try atomic RPC function first
+        const { data, error } = await supabaseClient.rpc('claim_next_render_job', {
+          worker_id_param: workerId,
+        });
+        if (!error && data && data.length > 0) {
+          const row = data[0];
+          return {
+            id: row.id,
+            projectId: row.project_id,
+            clipId: row.clip_id,
+            jobType: row.job_type || 'analysis',
+            stage: row.stage,
+            progress: row.progress,
+            status: row.status,
+            workerId: row.worker_id,
+            payload: row.payload,
+            attempts: row.attempts,
+            message: row.message,
+            error: row.error,
+            startedAt: row.started_at,
+            completedAt: row.completed_at,
+            createdAt: row.created_at,
+          };
+        }
+      } catch {
+        // Fallback to direct query & conditional update below
+      }
+
+      // Fallback query + atomic conditional update
+      const { data: queuedJobs } = await supabaseClient
+        .from('render_jobs')
+        .select('*')
+        .eq('status', 'queued')
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      if (queuedJobs && queuedJobs.length > 0) {
+        const candidate = queuedJobs[0];
+        const { data: updated } = await supabaseClient
+          .from('render_jobs')
+          .update({
+            status: 'running',
+            stage: 'probing_media',
+            worker_id: workerId,
+            started_at: new Date().toISOString(),
+            attempts: (candidate.attempts || 0) + 1,
+            message: `Claimed by media worker ${workerId}`,
+          })
+          .eq('id', candidate.id)
+          .eq('status', 'queued')
+          .select()
+          .single();
+
+        if (updated) {
+          return {
+            id: updated.id,
+            projectId: updated.project_id,
+            clipId: updated.clip_id,
+            jobType: updated.job_type || 'analysis',
+            stage: updated.stage,
+            progress: updated.progress,
+            status: updated.status,
+            workerId: updated.worker_id,
+            payload: updated.payload,
+            attempts: updated.attempts,
+            message: updated.message,
+            error: updated.error,
+            startedAt: updated.started_at,
+            completedAt: updated.completed_at,
+            createdAt: updated.created_at,
+          };
+        }
+      }
+    }
+
+    // Local file persistence atomic claim
+    const local = loadLocalDb();
+    const nextJob = Object.values(local.renderJobs)
+      .filter((j) => j.status === 'queued')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
+
+    if (nextJob) {
+      nextJob.status = 'running';
+      nextJob.stage = 'probing_media';
+      nextJob.workerId = workerId;
+      nextJob.attempts = (nextJob.attempts || 0) + 1;
+      nextJob.startedAt = new Date().toISOString();
+      nextJob.message = `Claimed by media worker ${workerId}`;
+      local.renderJobs[nextJob.id] = nextJob;
+      saveLocalDb(local);
+      return nextJob;
+    }
+
+    return null;
   },
 };

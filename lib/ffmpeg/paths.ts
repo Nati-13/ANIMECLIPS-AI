@@ -27,6 +27,15 @@ export function getFfmpegPath(): string {
     // ignore
   }
 
+  // Check standard Unix container paths
+  const commonUnixPaths = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg'];
+  for (const p of commonUnixPaths) {
+    if (fs.existsSync(p)) {
+      cachedFfmpegPath = p;
+      return cachedFfmpegPath;
+    }
+  }
+
   // Fallback to plain binary name
   cachedFfmpegPath = 'ffmpeg';
   return cachedFfmpegPath;
@@ -52,6 +61,15 @@ export function getFfprobePath(): string {
     }
   } catch {
     // ignore
+  }
+
+  // Check standard Unix container paths
+  const commonUnixProbePaths = ['/usr/bin/ffprobe', '/usr/local/bin/ffprobe', '/opt/homebrew/bin/ffprobe'];
+  for (const p of commonUnixProbePaths) {
+    if (fs.existsSync(p)) {
+      cachedFfprobePath = p;
+      return cachedFfprobePath;
+    }
   }
 
   // Fallback to plain binary name

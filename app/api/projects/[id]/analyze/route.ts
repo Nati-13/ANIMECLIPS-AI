@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-import fs from 'fs';
 import { db } from '@/lib/db';
-import { runVideoAnalysisPipeline } from '@/lib/engine/runner';
+import { RenderJob } from '@/types';
+import { jobProcessor } from '@/worker/job_processor';
 
 export async function POST(
   req: NextRequest,
@@ -16,20 +15,6 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}));
 
-  let videoPath = project.sourceStoragePath;
-  if (!videoPath || !fs.existsSync(videoPath)) {
-    const samplePath = path.resolve(process.cwd(), 'public/samples/anime_action_demo.mp4');
-    if (fs.existsSync(samplePath)) {
-      videoPath = samplePath;
-      await db.updateProject(id, { sourceStoragePath: samplePath, sourceType: 'sample' });
-    } else {
-      return NextResponse.json(
-        { error: 'No source video available. Please upload a video or select the demo video.' },
-        { status: 400 }
-      );
-    }
-  }
-
   // Update project settings if passed in body
   if (body.preset || body.targetDuration || body.aspectRatio) {
     await db.updateProject(id, {
@@ -40,21 +25,44 @@ export async function POST(
     });
   }
 
-  // Kick off pipeline asynchronously so response returns fast
-  // and client gets real-time job stage transitions!
-  runVideoAnalysisPipeline({
+  // Enqueue job for Media Worker (Vercel serverless-compliant)
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const job: RenderJob = {
+    id: jobId,
     projectId: id,
-    videoFilePath: videoPath,
-    numberOfClips: body.numberOfClips || 'auto',
-    actionIntensity: body.actionIntensity ?? 85,
-    sceneDiversity: body.sceneDiversity ?? 70,
-    prioritizeHook: body.prioritizeHook ?? true,
-  }).catch((err) => {
-    console.error(`Pipeline failure for project ${id}:`, err);
-  });
+    jobType: 'analysis',
+    stage: 'queued',
+    progress: 0,
+    status: 'queued',
+    message: 'Analysis job enqueued for media worker.',
+    createdAt: new Date().toISOString(),
+    payload: {
+      numberOfClips: body.numberOfClips || 'auto',
+      actionIntensity: body.actionIntensity ?? 85,
+      sceneDiversity: body.sceneDiversity ?? 70,
+      prioritizeHook: body.prioritizeHook ?? true,
+    },
+  };
+
+  await db.createRenderJob(job);
+  await db.updateProject(id, { status: 'queued' });
+
+  // Optional local development fallback:
+  // If explicitly enabled or running locally without standalone worker process
+  const enableInlineWorker = process.env.ENABLE_INLINE_MEDIA_WORKER === 'true';
+  if (enableInlineWorker) {
+    // Non-blocking background tick
+    setImmediate(() => {
+      jobProcessor.claimAndProcessNextJob(`inline_dev_${process.pid}`).catch((err) => {
+        console.error(`[inline-worker] Error processing job ${jobId}:`, err);
+      });
+    });
+  }
 
   return NextResponse.json({
     success: true,
-    message: 'Analysis initiated.',
+    jobId,
+    status: 'queued',
+    message: 'Analysis job queued for media worker.',
   });
 }

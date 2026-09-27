@@ -2,11 +2,14 @@
 
 Turn long-form videos (anime episodes, gaming, podcasts, tutorials, movies) into viral-ready 9:16 vertical short clips automatically with multi-signal action scoring, scene detection, vertical reframing, and real FFmpeg rendering.
 
+Repository: **[https://github.com/Nati-13/ANIMECLIPS-AI](https://github.com/Nati-13/ANIMECLIPS-AI)**
+
 ---
 
 ## ⚡ Key Features
 
-- **Real FFmpeg Hardware Core**: Uses local hardware-accelerated FFmpeg 9.0.1 and FFprobe. Zero fake simulations or placeholders.
+- **Real FFmpeg Hardware Core**: Uses native hardware-accelerated FFmpeg and FFprobe binaries. Zero fake simulations or placeholders.
+- **Asynchronous Media Worker**: Decoupled background processing daemon with atomic job claiming (`FOR UPDATE SKIP LOCKED`).
 - **Multi-Signal Action Scoring**: Evaluates visual motion intensity, shot cuts, frame differences, soundtrack surges, and opening hook power.
 - **Preset Content Profiles**:
   - `Anime Action`: Explosions, sword battles, power transformations, fast cuts.
@@ -26,21 +29,36 @@ Turn long-form videos (anime episodes, gaming, podcasts, tutorials, movies) into
   - Audio balance: Video volume, BGM soundtrack balance.
   - Text overlay banners.
 - **Strict Output Validation**: Every rendered short is inspected with FFprobe to verify container, 1080x1920 resolution, and valid audio/video streams.
-- **Honest Capability Reporting**: `/settings/capabilities` live-checks FFmpeg, FFprobe, Supabase, storage, transcription, and vision models without pretending integrations exist.
+- **Honest Capability Reporting**: `/settings/capabilities` live-checks FFmpeg, FFprobe, Supabase, storage, worker status, transcription, and vision models without pretending integrations exist.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Production Architecture
 
-- **Frontend**: Next.js 15 (App Router), TypeScript, Tailwind CSS, Lucide Icons, Cyberpunk Dark UI.
-- **Media Engine**: Native FFmpeg and FFprobe binaries.
-- **Database**: Supabase PostgreSQL with local JSON persistence fallback for development.
-- **Storage**: Supabase Storage buckets (`source-videos`, `generated-clips`, `thumbnails`, `captions`) with local `./storage` fallback.
-- **Security**: SSRF-protected URL importer, parameter validation, Supabase Row-Level Security (RLS).
+```text
+Browser (Next.js Client)
+       │
+       ▼
+Next.js on Vercel (UI, Auth, API Routes, Job Enqueuing)
+       │
+       ▼
+Supabase Cloud (PostgreSQL, Storage Buckets, Realtime Events)
+       │
+       ▼
+Media Processing Worker (Asynchronous Daemon with FFmpeg & FFprobe)
+       │
+       ▼
+Supabase Storage (Rendered 9:16 Shorts & Posters)
+```
+
+- **Frontend / Vercel**: Delivers rapid UI responses, handles authentication, projects, and enqueues heavy render jobs without exceeding serverless request timeouts.
+- **Database / Supabase**: Manages relational models (`projects`, `scenes`, `clips`, `clip_edits`, `render_jobs`) with Row-Level Security (RLS).
+- **Storage / Supabase Storage**: Dedicated buckets for `source-videos`, `generated-clips`, `thumbnails`, `captions`, `music`, and `sfx`.
+- **Media Worker**: Dedicated Node.js + FFmpeg process polling jobs atomically using `FOR UPDATE SKIP LOCKED`.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start & Local Development
 
 ### 1. Prerequisites
 - **Node.js**: v20+ or v24+
@@ -48,8 +66,8 @@ Turn long-form videos (anime episodes, gaming, podcasts, tutorials, movies) into
 
 ### 2. Installation
 ```bash
-git clone https://github.com/your-username/animeclips-ai.git
-cd animeclips-ai
+git clone https://github.com/Nati-13/ANIMECLIPS-AI.git
+cd ANIMECLIPS-AI
 npm install
 ```
 
@@ -65,21 +83,44 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 5. Running Automated Tests & Pipeline Verification
+### 5. Running the Media Worker
+In a separate terminal or production container:
 ```bash
+npm run worker
+```
+For hot-reloading worker development:
+```bash
+npm run worker:dev
+```
+
+### 6. Testing & Typechecking
+```bash
+npm run typecheck
 npm test
 node scripts/test_pipeline.mjs
 ```
 
 ---
 
+## 🔒 Safe URL Import & Security
+
+AnimeClips AI includes strict SSRF protections for importing web videos:
+- Protocol validation (enforces `http:` or `https:`)
+- DNS resolution & private IP range blocking (blocks localhost, 127.0.0.1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+- File size guardrails (maximum 500MB)
+- Content-type validation (`video/*`)
+- **No DRM Bypassing**: The system does not bypass DRM or violate third-party Terms of Service. Only direct accessible media URLs are accepted.
+
+---
+
 ## 📂 Project Structure
 
-```
+```text
 ├── app/
 │   ├── api/
 │   │   ├── admin/system/route.ts
 │   │   ├── capabilities/route.ts
+│   │   ├── health/route.ts
 │   │   ├── clips/[id]/route.ts
 │   │   ├── clips/[id]/edit/route.ts
 │   │   ├── clips/[id]/render/route.ts
@@ -97,27 +138,25 @@ node scripts/test_pipeline.mjs
 │   ├── signup/page.tsx
 │   ├── layout.tsx
 │   └── page.tsx
+├── worker/
+│   ├── index.ts              # Main worker daemon loop
+│   ├── job_processor.ts      # Atomic claiming & status transitions
+│   └── media_processor.ts    # Pipeline & FFmpeg render execution
 ├── lib/
 │   ├── config/presets.ts
-│   ├── db/index.ts
-│   ├── engine/
-│   │   ├── audio_analyzer.ts
-│   │   ├── candidate_generator.ts
-│   │   ├── caption_engine.ts
-│   │   ├── clip_selector.ts
-│   │   ├── crop_analyzer.ts
-│   │   ├── media_probe.ts
-│   │   ├── motion_analyzer.ts
-│   │   ├── runner.ts
-│   │   ├── scene_detector.ts
-│   │   ├── url_importer.ts
-│   │   └── validator.ts
-│   ├── ffmpeg/
-│   │   ├── paths.ts
-│   │   └── renderer.ts
-│   └── storage/index.ts
-├── public/samples/anime_action_demo.mp4
-├── supabase/migrations/20260927000001_init_animeclips.sql
+│   ├── db/index.ts           # Dual-mode persistence (Supabase + Local)
+│   ├── engine/               # Media analysis & scoring algorithms
+│   ├── ffmpeg/               # Cross-platform FFmpeg paths & renderer
+│   └── storage/index.ts      # Dual-mode storage (Supabase + Local)
+├── docs/
+│   ├── architecture.md
+│   ├── deployment.md
+│   ├── media-pipeline.md
+│   ├── production-checklist.md
+│   └── url-imports.md
+├── supabase/migrations/
+│   ├── 20260927000001_init_animeclips.sql
+│   └── 20260927000002_add_worker_job_claiming.sql
 └── tests/
 ```
 

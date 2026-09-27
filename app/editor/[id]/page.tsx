@@ -143,6 +143,23 @@ export default function VideoEditorPage({
       if (!res.ok) {
         alert(data.error || 'Rendering failed');
       } else {
+        // Poll for asynchronous worker completion
+        let done = false;
+        let attempts = 0;
+        while (!done && attempts < 90) {
+          await new Promise((r) => setTimeout(r, 2000));
+          attempts++;
+          const checkRes = await fetch(`/api/clips/${currentClip.id}`);
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            if (checkData.clip?.status === 'rendered') {
+              done = true;
+              break;
+            } else if (checkData.clip?.status === 'failed') {
+              throw new Error('Rendering failed in media worker.');
+            }
+          }
+        }
         alert('Clip successfully rendered to 9:16 vertical MP4 and validated!');
         await loadData();
       }
