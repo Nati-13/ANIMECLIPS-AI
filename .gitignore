@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Next.js build output & cache
+.next/
+out/
+tsconfig.tsbuildinfo
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+logs/
+
+# Local media storage
+storage/source-videos/*
+storage/generated-clips/*
+storage/thumbnails/*
+storage/captions/*
+storage/music/*
+storage/sfx/*
+storage/db_store.json
+
+# Keep storage directories with .gitkeep
+!storage/**/.gitkeep
+
+# Temporary files
+tmp/
+temp/
+
+# Media files (enforce zero large video files in Git repo)
+*.mp4
+*.mov
+*.mkv
+*.webm
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test coverage
+coverage/
