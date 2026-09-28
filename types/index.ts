@@ -113,6 +113,13 @@ export interface Scene {
     cutConfidence?: number;
     colorVariety?: number;
     isKeyTransition?: boolean;
+    nvidiaVision?: {
+      tags: string[];
+      summary: string;
+      dramaScore: number;
+      semanticAction: number;
+    };
+    [key: string]: unknown;
   };
   createdAt: string;
 }

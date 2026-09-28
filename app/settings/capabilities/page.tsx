@@ -170,10 +170,22 @@ export default function CapabilitiesPage() {
                 </div>
               </div>
 
-              <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {capabilities.database.type === 'supabase' ? 'Supabase Postgres' : 'Local Persistent'}
-              </span>
+              {capabilities.database.statusRating === 'available' ? (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Connected
+                </span>
+              ) : capabilities.database.statusRating === 'limited' ? (
+                <span className="flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Not configured
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 rounded-full bg-red-500/10 border border-red-500/30 px-2.5 py-0.5 text-xs font-bold text-red-400">
+                  <XCircle className="h-3.5 w-3.5" />
+                  Connection error
+                </span>
+              )}
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed">
@@ -236,7 +248,7 @@ export default function CapabilitiesPage() {
             </p>
           </div>
 
-          {/* Vision AI Status (Requirement #14, #44, #64) */}
+          {/* Vision AI Status (NVIDIA Hosted API Catalog) */}
           <div className="rounded-2xl border border-white/10 bg-surface-50 p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -244,18 +256,39 @@ export default function CapabilitiesPage() {
                   <Eye className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-display text-sm font-bold text-white">Vision AI & Saliency</h3>
-                  <span className="text-[11px] text-slate-400 font-mono">Character tracking & semantic analysis</span>
+                  <h3 className="font-display text-sm font-bold text-white">NVIDIA Vision</h3>
+                  <span className="text-[11px] text-slate-400 font-mono">Semantic anime & scene analysis</span>
                 </div>
               </div>
 
-              <span className="flex items-center gap-1 rounded-full bg-brand-cyan/10 border border-brand-cyan/30 px-2.5 py-0.5 text-xs font-bold text-brand-cyan">
-                Motion Highlight Core
-              </span>
+              {capabilities.visionAI.available ? (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Available
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 rounded-full bg-red-500/10 border border-red-500/30 px-2.5 py-0.5 text-xs font-bold text-red-400">
+                  <XCircle className="h-3.5 w-3.5" />
+                  Unavailable
+                </span>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-surface-100 p-3 font-mono text-xs space-y-1 text-slate-300">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Provider:</span>
+                <span>NVIDIA API Catalog</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Model:</span>
+                <span className="text-brand-cyan">z-ai/glm-5-3-flash</span>
+              </div>
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed">
-              {capabilities.visionAI.message}
+              {capabilities.visionAI.available
+                ? capabilities.visionAI.message
+                : 'API key not configured'}
             </p>
           </div>
 

@@ -33,6 +33,7 @@ storage/db_store.json
 # Temporary files
 tmp/
 temp/
+supabase/.temp/
 
 # Media files (enforce zero large video files in Git repo)
 *.mp4

@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 import { checkFfmpegAvailable, checkFfprobeAvailable, getFfmpegPath, getFfprobePath } from '@/lib/ffmpeg/paths';
-import { isSupabaseConfigured, db } from '@/lib/db';
+import { db } from '@/lib/db';
 import { storage } from '@/lib/storage';
 import { SystemCapabilities } from '@/types';
 import { getWorkerHealth } from '@/worker/index';
+import { checkNvidiaConnection } from '@/lib/engine/nvidia_vision';
 
 export async function GET() {
   const ffmpegCheck = checkFfmpegAvailable();
   const ffprobeCheck = checkFfprobeAvailable();
   const workerHealth = getWorkerHealth();
+  const nvidiaCheck = await checkNvidiaConnection();
+  const dbCheck = await db.checkDatabaseConnection();
 
   const transcriptionProvider = process.env.TRANSCRIPTION_PROVIDER || 'none';
   const hasTranscriptionKey = Boolean(process.env.TRANSCRIPTION_API_KEY);
@@ -49,11 +52,11 @@ export async function GET() {
       statusRating: (transcriptionProvider !== 'none' && hasTranscriptionKey) ? 'available' : 'unavailable',
     },
     visionAI: {
-      available: false,
-      provider: process.env.VISION_PROVIDER || 'none',
-      status: 'fallback_motion',
-      message: 'Running local FFmpeg Motion & Visual Activity Highlight Analysis. Semantic vision models are not currently configured.',
-      statusRating: 'limited',
+      available: nvidiaCheck.available,
+      provider: nvidiaCheck.provider,
+      status: nvidiaCheck.available ? 'connected' : (nvidiaCheck.status === 'not_configured' ? 'not_configured' : 'fallback_motion'),
+      message: nvidiaCheck.message,
+      statusRating: nvidiaCheck.available ? 'available' : 'unavailable',
     },
     storage: {
       available: true,
@@ -62,10 +65,10 @@ export async function GET() {
       statusRating: storage.isUsingSupabase() ? 'available' : 'limited',
     },
     database: {
-      available: true,
+      available: dbCheck.available,
       type: db.isUsingSupabase() ? 'supabase' : 'local_persistent',
-      message: db.isUsingSupabase() ? 'Connected to Supabase PostgreSQL' : 'Operating on resilient local file persistence',
-      statusRating: db.isUsingSupabase() ? 'available' : 'limited',
+      message: dbCheck.message,
+      statusRating: dbCheck.status === 'connected' ? 'available' : (dbCheck.status === 'not_configured' ? 'limited' : 'unavailable'),
     },
     urlImport: {
       directVideoUrl: 'supported',

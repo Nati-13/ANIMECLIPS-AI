@@ -6,6 +6,7 @@ import { analyzeScenesAudio } from './audio_analyzer';
 import { transcribeAudio } from './caption_engine';
 import { generateCandidateSegments } from './candidate_generator';
 import { selectBestClips } from './clip_selector';
+import { enrichScenesWithNvidiaVision } from './nvidia_vision';
 import { CONTENT_PRESETS } from '@/lib/config/presets';
 import { JobStage, RenderJob } from '@/types';
 
@@ -74,14 +75,21 @@ export async function runVideoAnalysisPipeline(options: AnalysisRunnerOptions): 
     const audioScenes = await analyzeScenesAudio(videoFilePath, motionScenes);
     await db.saveScenes(projectId, audioScenes);
 
-    // 5. Transcribing (if configured)
-    await updateStage('transcribing', 75, 'Checking transcription engine capability...');
+    // 5. Semantic Anime Vision Analysis (NVIDIA API Catalog)
+    await updateStage('analyzing_motion', 72, 'Running NVIDIA semantic vision analysis on representative frames...');
+    const { scenes: enrichedScenes, providerUsed } = await enrichScenesWithNvidiaVision(videoFilePath, audioScenes, projectId);
+    if (providerUsed === 'nvidia') {
+      await db.saveScenes(projectId, enrichedScenes);
+    }
+
+    // 6. Transcribing (if configured)
+    await updateStage('transcribing', 78, 'Checking transcription engine capability...');
     await transcribeAudio(videoFilePath);
 
-    // 6. Scoring Candidate Segments
+    // 7. Scoring Candidate Segments
     await updateStage('scoring_candidates', 85, 'Evaluating candidate windows against anime preset weights...');
     const preset = CONTENT_PRESETS[project.preset] || CONTENT_PRESETS.animeAction;
-    const candidates = generateCandidateSegments(audioScenes, metadata.duration, project.targetDuration, preset);
+    const candidates = generateCandidateSegments(enrichedScenes, metadata.duration, project.targetDuration, preset);
 
     // 7. Selecting Best Non-Redundant Clips
     await updateStage('selecting_clips', 95, 'Selecting peak action moments and deduplicating scenes...');
