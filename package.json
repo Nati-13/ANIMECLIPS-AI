@@ -13,8 +13,6 @@
     "worker:dev": "tsx watch worker/index.ts"
   },
   "dependencies": {
-    "@next/swc-wasm-nodejs": "15.5.26",
-    "@next/swc-win32-x64-msvc": "15.5.26",
     "@supabase/phoenix": "^0.4.5",
     "@supabase/supabase-js": "^2.117.2",
     "clsx": "^2.1.1",
